@@ -651,7 +651,7 @@
           "type": "string"
         },
         "models": {
-          "description": "Model source for this provider. Can be either a URL template for\nfetching the model list, or a static list of model entries.",
+          "description": "Model source for this provider. Can be either a URL template for\nfetching the model list, or a static list of model entries. Set to null or omit for providers that don't expose a /models endpoint.",
           "anyOf": [
             {
               "$ref": "#/$defs/ProviderModels"

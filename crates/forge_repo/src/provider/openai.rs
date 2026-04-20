@@ -226,10 +226,11 @@ impl<H: HttpInfra> OpenAIProvider<H> {
             debug!("Loading Vertex AI models from static JSON file");
             Ok(self.inner_vertex_models())
         } else {
-            let models = self
-                .provider
-                .models()
-                .ok_or_else(|| anyhow::anyhow!("Provider models configuration is required"))?;
+            // Handle providers with no models configuration
+            let Some(models) = self.provider.models() else {
+                debug!("Provider has no models configuration, returning empty list");
+                return Ok(vec![]);
+            };
 
             match models {
                 forge_domain::ModelSource::Url(url) => {
@@ -1167,6 +1168,60 @@ mod tests {
                 .iter()
                 .any(|(k, v)| k == "Openai-Intent" && v == "conversation-edits")
         );
+        Ok(())
+    }
+
+    // Tests for optional models configuration (v2 feature)
+
+    /// Helper function to create a provider without models configuration
+    fn provider_without_models() -> Provider<Url> {
+        Provider {
+            id: ProviderId::FORGE_SERVICES,
+            provider_type: forge_domain::ProviderType::Llm,
+            response: Some(ProviderResponse::OpenAI),
+            url: Url::parse("https://api.forgecode.dev/v1/chat/completions").unwrap(),
+            credential: make_credential(ProviderId::FORGE_SERVICES, "test-api-key"),
+            custom_headers: None,
+            auth_methods: vec![forge_domain::AuthMethod::ApiKey],
+            url_params: vec![],
+            models: None, // No models configuration
+        }
+    }
+
+    /// Helper function to create a provider with empty hardcoded models
+    fn provider_with_empty_models() -> Provider<Url> {
+        Provider {
+            id: ProviderId::CUSTOM,
+            provider_type: forge_domain::ProviderType::Llm,
+            response: Some(ProviderResponse::OpenAI),
+            url: Url::parse("https://api.example.com/v1/chat/completions").unwrap(),
+            credential: make_credential(ProviderId::CUSTOM, "test-api-key"),
+            custom_headers: None,
+            auth_methods: vec![forge_domain::AuthMethod::ApiKey],
+            url_params: vec![],
+            models: Some(forge_domain::ModelSource::Hardcoded(vec![])), // Empty static list
+        }
+    }
+
+    #[tokio::test]
+    async fn test_provider_without_models_returns_empty() -> anyhow::Result<()> {
+        let provider = provider_without_models();
+        let http_client = Arc::new(MockHttpClient::new());
+        let openai_provider = OpenAIProvider::new(provider, http_client);
+
+        let actual = openai_provider.models().await?;
+        assert!(actual.is_empty(), "Expected empty list for provider without models configuration");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_provider_with_empty_hardcoded_models_returns_empty() -> anyhow::Result<()> {
+        let provider = provider_with_empty_models();
+        let http_client = Arc::new(MockHttpClient::new());
+        let openai_provider = OpenAIProvider::new(provider, http_client);
+
+        let actual = openai_provider.models().await?;
+        assert!(actual.is_empty(), "Expected empty list for provider with empty hardcoded models");
         Ok(())
     }
 }

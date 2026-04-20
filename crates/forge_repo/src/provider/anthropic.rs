@@ -224,11 +224,11 @@ impl<T: HttpInfra> Anthropic<T> {
     }
 
     pub async fn models(&self) -> anyhow::Result<Vec<Model>> {
-        let models = self
-            .provider
-            .models
-            .as_ref()
-            .context("Anthropic requires models configuration")?;
+        // Handle providers with no models configuration
+        let Some(models) = self.provider.models.as_ref() else {
+            debug!("Provider has no models configuration, returning empty list");
+            return Ok(vec![]);
+        };
 
         match models {
             forge_domain::ModelSource::Url(url) => {

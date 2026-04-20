@@ -18,7 +18,7 @@ struct Google<T> {
     http: Arc<T>,
     api_key: String,
     chat_url: Url,
-    models: forge_domain::ModelSource<Url>,
+    models: Option<forge_domain::ModelSource<Url>>,
     use_api_key_header: bool,
 }
 
@@ -27,7 +27,7 @@ impl<H: HttpInfra> Google<H> {
         http: Arc<H>,
         api_key: String,
         chat_url: Url,
-        models: forge_domain::ModelSource<Url>,
+        models: Option<forge_domain::ModelSource<Url>>,
         use_api_key_header: bool,
     ) -> Self {
         Self { http, api_key, chat_url, models, use_api_key_header }
@@ -92,7 +92,7 @@ impl<T: HttpInfra> Google<T> {
 
     pub async fn models(&self) -> anyhow::Result<Vec<Model>> {
         match &self.models {
-            forge_domain::ModelSource::Url(url) => {
+            Some(forge_domain::ModelSource::Url(url)) => {
                 debug!(url = %url, "Fetching models");
 
                 let response = self
@@ -128,9 +128,14 @@ impl<T: HttpInfra> Google<T> {
                         .with_context(|| "Failed to fetch the models")
                 }
             }
-            forge_domain::ModelSource::Hardcoded(models) => {
+            Some(forge_domain::ModelSource::Hardcoded(models)) => {
                 debug!("Using hardcoded models");
                 Ok(models.clone())
+            }
+            // Handle providers with no models configuration
+            None => {
+                debug!("Provider has no models configuration, returning empty list");
+                Ok(vec![])
             }
         }
     }
@@ -151,10 +156,7 @@ impl<F: HttpInfra> GoogleResponseRepository<F> {
     /// Creates a Google client from a provider configuration
     fn create_client(&self, provider: &Provider<Url>) -> anyhow::Result<Google<F>> {
         let chat_url = provider.url.clone();
-        let models = provider
-            .models
-            .clone()
-            .context("Google requires models configuration")?;
+        let models = provider.models.clone();
         let creds = provider
             .credential
             .as_ref()
